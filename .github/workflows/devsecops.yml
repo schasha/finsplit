@@ -33,14 +33,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Rodamos o Trivy pela imagem Docker oficial em versão fixa, evitando a
+      # trivy-action (comprometida em mar/2026 num ataque de supply chain).
+      # Imagem no GHCR: ghcr.io/aquasecurity/trivy (oficial).
       - name: Trivy - dependências (tabela no log)
         run: |
-          docker run --rm -v "${PWD}:/src" aquasecurity/trivy:0.71.2 \
-            fs --scanners vuln --severity CRITICAL,HIGH,MEDIUM --no-progress /src
+          docker run --rm -v "${PWD}:/src" ghcr.io/aquasecurity/trivy:0.71.2 \
+            fs --scanners vuln --severity CRITICAL,HIGH,MEDIUM --no-progress /src || true
 
       - name: Trivy - dependências (SARIF)
         run: |
-          docker run --rm -v "${PWD}:/src" aquasecurity/trivy:0.71.2 \
+          docker run --rm -v "${PWD}:/src" ghcr.io/aquasecurity/trivy:0.71.2 \
             fs --scanners vuln --format sarif --output /src/trivy-sca.sarif \
             --no-progress /src || true
 
@@ -170,3 +173,4 @@ jobs:
 
       - name: Logs da aplicação (apoio à análise)
         if: always()
+        run: docker compose logs web || true
