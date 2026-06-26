@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <title>FinSplit</title>
+  <style>
+    body { font-family: sans-serif; max-width: 760px; margin: 2rem auto; padding: 0 1rem; }
+    nav { margin-bottom: 1.5rem; border-bottom: 1px solid #ccc; padding-bottom: .5rem; }
+    .flash { background: #fffae6; padding: .5rem; border: 1px solid #e0c000; }
+    table { border-collapse: collapse; width: 100%; }
+    td, th { border: 1px solid #ddd; padding: .4rem; text-align: left; }
+    input { padding: .3rem; }
+  </style>
+</head>
+<body>
+  <nav>
+    <strong>FinSplit</strong>
+    {% if session.get('user_id') %}
+      &mdash; {{ session.get('name') }}
+      | <a href="{{ url_for('routes.index') }}">Grupos</a>
+      | <a href="{{ url_for('routes.logout') }}">Sair</a>
+    {% endif %}
+  </nav>
+  {% with messages = get_flashed_messages() %}
+    {% for m in messages %}<div class="flash">{{ m }}</div>{% endfor %}
+  {% endwith %}
+  {% block content %}{% endblock %}
+</body>
+</html>

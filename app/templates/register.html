@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Criar conta</h1>
+<form method="post">
+  <p><input name="name" placeholder="Nome" required></p>
+  <p><input name="email" type="email" placeholder="E-mail" required></p>
+  <p><input name="password" type="password" placeholder="Senha" required></p>
+  <p><button type="submit">Cadastrar</button></p>
+</form>
+{% endblock %}

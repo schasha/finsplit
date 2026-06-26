@@ -1,0 +1,175 @@
+name: DevSecOps Pipeline
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write   # permite enviar SARIF para a aba Security (repo público/GHAS)
+
+jobs:
+  # ----------------------------------------------------------------- 1. SECRET
+  secret-detection:
+    name: Secret Detection (Gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # histórico completo de commits
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        continue-on-error: true   # reporta sem derrubar a esteira
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # -------------------------------------------------------------------- 2. SCA
+  sca:
+    name: SCA (Trivy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Rodamos o Trivy pela imagem Docker oficial em versão fixa, evitando a
+      # trivy-action (comprometida em mar/2026 num ataque de supply chain).
+      - name: Trivy - dependências (tabela no log)
+        run: |
+          docker run --rm -v "${PWD}:/src" aquasecurity/trivy:0.71.2 \
+            fs --scanners vuln --severity CRITICAL,HIGH,MEDIUM --no-progress /src
+
+      - name: Trivy - dependências (SARIF)
+        run: |
+          docker run --rm -v "${PWD}:/src" aquasecurity/trivy:0.71.2 \
+            fs --scanners vuln --format sarif --output /src/trivy-sca.sarif \
+            --no-progress /src || true
+
+      - name: Upload relatório SCA
+        uses: actions/upload-artifact@v4
+        with:
+          name: sca-trivy-report
+          path: trivy-sca.sarif
+
+      - name: Enviar SARIF para Code Scanning
+        uses: github/codeql-action/upload-sarif@v3
+        continue-on-error: true
+        with:
+          sarif_file: trivy-sca.sarif
+          category: sca-trivy
+
+  # ------------------------------------------------------------------- 3. SAST
+  sast:
+    name: SAST (Semgrep + Bandit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Semgrep
+        run: |
+          docker run --rm -v "${PWD}:/src" semgrep/semgrep \
+            semgrep scan --config auto --sarif --output /src/semgrep.sarif || true
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Bandit (foco no código Python da aplicação)
+        run: |
+          pip install bandit
+          bandit -r app -f txt -o bandit-report.txt || true
+          echo "----- BANDIT -----"
+          cat bandit-report.txt || true
+
+      - name: Upload relatórios SAST
+        uses: actions/upload-artifact@v4
+        with:
+          name: sast-reports
+          path: |
+            semgrep.sarif
+            bandit-report.txt
+
+      - name: Enviar SARIF do Semgrep para Code Scanning
+        uses: github/codeql-action/upload-sarif@v3
+        continue-on-error: true
+        with:
+          sarif_file: semgrep.sarif
+          category: sast-semgrep
+
+  # -------------------------------------------------------------------- 4. IaC
+  iac-scanning:
+    name: IaC Scanning (Checkov)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checkov - saída legível no log
+        run: |
+          docker run --rm -v "${PWD}:/src" bridgecrew/checkov:latest \
+            -d /src --framework dockerfile,docker_compose --compact || true
+
+      - name: Checkov - SARIF
+        run: |
+          docker run --rm -v "${PWD}:/src" bridgecrew/checkov:latest \
+            -d /src --framework dockerfile,docker_compose \
+            -o sarif --output-file-path /src || true
+          ls -la results.sarif || true
+
+      - name: Upload relatório IaC
+        uses: actions/upload-artifact@v4
+        with:
+          name: iac-checkov-report
+          path: results.sarif
+
+      - name: Enviar SARIF para Code Scanning
+        uses: github/codeql-action/upload-sarif@v3
+        continue-on-error: true
+        with:
+          sarif_file: results.sarif
+          category: iac-checkov
+
+  # ------------------------------------------------------------------- 5. DAST
+  dast:
+    name: DAST (OWASP ZAP)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Subir a aplicação (docker compose)
+        run: docker compose up -d --build
+
+      - name: Aguardar a aplicação responder
+        run: |
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5000/login || echo 000)
+            echo "tentativa $i -> HTTP $code"
+            if [ "$code" = "200" ]; then echo "App no ar"; exit 0; fi
+            sleep 3
+          done
+          echo "App não respondeu a tempo"; docker compose logs; exit 1
+
+      - name: Semear um dado para o scan
+        run: |
+          curl -s -X POST http://localhost:5000/register \
+            -d "name=Scanner&email=scan@test.com&password=123456" || true
+
+      - name: OWASP ZAP Baseline Scan
+        run: |
+          docker run --network="host" -v ${PWD}:/zap/wrk/:rw \
+            ghcr.io/zaproxy/zaproxy:stable \
+            zap-baseline.py -t http://localhost:5000 \
+            -r zap-report.html -w zap-report.md -I || true
+
+      - name: Upload relatório DAST
+        uses: actions/upload-artifact@v4
+        with:
+          name: dast-zap-report
+          path: |
+            zap-report.html
+            zap-report.md
+
+      - name: Logs da aplicação (apoio à análise)
+        if: always()
+        run: docker compose logs web || true

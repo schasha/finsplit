@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Entrar</h1>
+<form method="post">
+  <p><input name="email" type="email" placeholder="E-mail" required></p>
+  <p><input name="password" type="password" placeholder="Senha" required></p>
+  <p><button type="submit">Entrar</button></p>
+</form>
+<p>Sem conta? <a href="{{ url_for('routes.register') }}">Cadastre-se</a></p>
+{% endblock %}

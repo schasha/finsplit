@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Meus grupos</h1>
+<ul>
+  {% for g in groups %}
+    <li><a href="{{ url_for('routes.view_group', group_id=g.id) }}">{{ g.name }}</a></li>
+  {% else %}
+    <li>Nenhum grupo ainda.</li>
+  {% endfor %}
+</ul>
+<h2>Novo grupo</h2>
+<form method="post" action="{{ url_for('routes.create_group') }}">
+  <input name="name" placeholder="Nome do grupo" required>
+  <button type="submit">Criar</button>
+</form>
+{% endblock %}

@@ -1,0 +1,28 @@
+version: "3.8"
+
+services:
+  web:
+    build: .
+    ports:
+      - "5000:5000"
+    environment:
+      DB_HOST: db
+      DB_NAME: finsplit
+      DB_USER: finsplit
+      # ACHADO (IaC/Secret): senha fraca e em texto claro no compose.
+      DB_PASSWORD: postgres
+      SECRET_KEY: dev-secret-key-12345
+    depends_on:
+      - db
+
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: finsplit
+      POSTGRES_USER: finsplit
+      POSTGRES_PASSWORD: postgres
+    ports:
+      # ACHADO (IaC): banco exposto na rede do host.
+      - "5432:5432"
+    volumes:
+      - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql
