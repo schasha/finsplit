@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
-{# ACHADO (XSS refletido): o termo buscado é ecoado com |safe. #}
-<h1>Resultados para: {{ term | safe }}</h1>
+{# CORRIGIDO (XSS refletido): termo escapado automaticamente. #}
+<h1>Resultados para: {{ term }}</h1>
 <p><a href="{{ url_for('routes.view_group', group_id=group_id) }}">&larr; Voltar ao grupo</a></p>
 <table>
   <tr><th>Descrição</th><th>Valor</th></tr>

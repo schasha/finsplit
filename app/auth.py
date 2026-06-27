@@ -1,15 +1,14 @@
-import hashlib
 import functools
 
-from flask import session, redirect, url_for, request, flash
+from werkzeug.security import generate_password_hash, check_password_hash
+from flask import session, redirect, url_for
 
 from . import db
 
 
 def hash_password(password):
-    # ACHADO (SAST/Bandit B324): md5 sem salt é hashing inseguro para senhas.
-    # Correção futura: usar werkzeug.security.generate_password_hash / bcrypt.
-    return hashlib.md5(password.encode()).hexdigest()
+    # CORRIGIDO: pbkdf2/scrypt com salt, no lugar de md5 sem salt.
+    return generate_password_hash(password)
 
 
 def register_user(name, email, password):
@@ -21,14 +20,15 @@ def register_user(name, email, password):
 
 
 def authenticate(email, password):
-    pw_hash = hash_password(password)
-    # ACHADO (SAST/Bandit B608 + DAST SQLi): query construída por concatenação.
-    sql = (
-        "SELECT id, name, email FROM users "
-        f"WHERE email = '{email}' AND password_hash = '{pw_hash}'"
+    # CORRIGIDO: query parametrizada (sem SQLi) e verificação de hash em vez de
+    # comparar strings de senha.
+    rows = db.query(
+        "SELECT id, name, email, password_hash FROM users WHERE email = %s",
+        (email,),
     )
-    rows = db.execute_raw(sql)
-    return rows[0] if rows else None
+    if rows and check_password_hash(rows[0]["password_hash"], password):
+        return {"id": rows[0]["id"], "name": rows[0]["name"], "email": rows[0]["email"]}
+    return None
 
 
 def login_required(view):

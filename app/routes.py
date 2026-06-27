@@ -128,31 +128,34 @@ def add_expense(group_id):
     return redirect(url_for("routes.view_group", group_id=group_id))
 
 
-# -------------------------------------------------- busca (SQL Injection)
+# -------------------------------------------------- busca (CORRIGIDO: parametrizada)
 @bp.route("/groups/<int:group_id>/search")
 @auth.login_required
 def search_expenses(group_id):
     term = request.args.get("q", "")
-    # ACHADO (SAST B608 + DAST SQLi): termo concatenado direto na query.
-    sql = (
+    # CORRIGIDO: o termo vai como parâmetro (%s), não concatenado. Sem SQLi.
+    results = db.query(
         "SELECT id, description, amount FROM expenses "
-        f"WHERE group_id = {group_id} AND description LIKE '%{term}%'"
+        "WHERE group_id = %s AND description LIKE %s",
+        (group_id, f"%{term}%"),
     )
-    results = db.execute_raw(sql)
     return render_template("search.html", results=results, term=term,
                            group_id=group_id)
 
 
-# -------------------------------------------------- detalhe (IDOR)
+# -------------------------------------------------- detalhe (CORRIGIDO: sem IDOR)
 @bp.route("/expenses/<int:expense_id>")
 @auth.login_required
 def expense_detail(expense_id):
-    # ACHADO (Broken Access Control / IDOR): não verifica se o usuário logado
-    # pertence ao grupo da despesa. Qualquer um vê qualquer despesa por id.
+    # CORRIGIDO: só retorna a despesa se o usuário logado for membro do grupo
+    # dela. O JOIN com group_members + filtro por user_id impede o IDOR.
     rows = db.query(
         "SELECT e.id, e.description, e.amount, e.group_id, u.name AS payer "
-        "FROM expenses e JOIN users u ON u.id = e.payer_id WHERE e.id = %s",
-        (expense_id,),
+        "FROM expenses e "
+        "JOIN users u ON u.id = e.payer_id "
+        "JOIN group_members m ON m.group_id = e.group_id "
+        "WHERE e.id = %s AND m.user_id = %s",
+        (expense_id, auth.current_user_id()),
     )
     if not rows:
         return jsonify({"error": "not found"}), 404

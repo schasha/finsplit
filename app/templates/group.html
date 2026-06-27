@@ -12,8 +12,8 @@
   <tr><th>Descrição</th><th>Valor</th><th>Pago por</th></tr>
   {% for e in expenses %}
     <tr>
-      {# ACHADO (XSS): descrição renderizada com |safe, sem escape. #}
-      <td><a href="{{ url_for('routes.expense_detail', expense_id=e.id) }}">{{ e.description | safe }}</a></td>
+      {# CORRIGIDO (XSS): autoescape do Jinja ativo; sem |safe. #}
+      <td><a href="{{ url_for('routes.expense_detail', expense_id=e.id) }}">{{ e.description }}</a></td>
       <td>R$ {{ '%.2f' % e.amount }}</td>
       <td>{{ e.payer }}</td>
     </tr>
